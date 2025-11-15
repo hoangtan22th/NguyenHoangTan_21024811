@@ -1,95 +1,134 @@
-import { Link } from "expo-router";
-import React from "react";
-import { Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+// File: app/index.tsx
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  ListRenderItemInfo,
+} from "react-native";
+import React, { useCallback, useState } from "react";
+import { useSQLiteContext } from "expo-sqlite";
+import { Expense } from "@/types/expense"; // Đảm bảo đúng đường dẫn
+import { useFocusEffect } from "expo-router";
+import { getAllExpenses } from "@/db/db";
 
-export default function Page() {
+// Hàm helper để format tiền tệ [cite: 36]
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+  }).format(amount);
+};
+
+// Component con để render 1 item [cite: 36]
+const ExpenseItem = React.memo(({ item }: { item: Expense }) => (
+  <View style={styles.itemContainer}>
+    <View style={styles.itemMain}>
+      <Text style={styles.itemTitle}>{item.title}</Text>
+      <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
+    </View>
+    <View style={styles.itemDetails}>
+      <Text style={styles.itemCategory}>{item.category || "Không có"}</Text>
+      <Text style={item.paid ? styles.paid : styles.unpaid}>
+        {item.paid ? "Đã trả" : "Chưa trả"}
+      </Text>
+    </View>
+  </View>
+));
+
+export default function HomeScreen() {
+  const db = useSQLiteContext();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+
+  // Hàm để load dữ liệu từ DB
+  const loadData = useCallback(async () => {
+    console.log("Loading data for home screen...");
+    const data = await getAllExpenses(db);
+    setExpenses(data);
+  }, [db]);
+
+  // Dùng useFocusEffect để load lại data mỗi khi quay lại màn hình [cite: 38]
+  // (Tốt hơn useEffect thông thường)
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  // Component hiển thị khi danh sách rỗng [cite: 39]
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyText}>Chưa có khoản chi tiêu nào.</Text>
+    </View>
+  );
+
   return (
-    <View className="flex flex-1">
-      <Header />
-      <Content />
-      <Footer />
+    <View style={styles.container}>
+      <FlatList
+        data={expenses}
+        renderItem={({ item }) => <ExpenseItem item={item} />}
+        keyExtractor={(item) => item.id.toString()}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={{ padding: 10 }}
+      />
     </View>
   );
 }
 
-function Content() {
-  return (
-    <View className="flex-1">
-      <View className="py-12 md:py-24 lg:py-32 xl:py-48">
-        <View className="px-4 md:px-6">
-          <View className="flex flex-col items-center gap-4 text-center">
-            <Text
-              role="heading"
-              className="text-3xl text-center native:text-5xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl"
-            >
-              Welcome to Project ACME
-            </Text>
-            <Text className="mx-auto max-w-[700px] text-lg text-center text-gray-500 md:text-xl dark:text-gray-400">
-              Discover and collaborate on acme. Explore our services now.
-            </Text>
-
-            <View className="gap-4">
-              <Link
-                suppressHighlighting
-                className="flex h-9 items-center justify-center overflow-hidden rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-gray-50 web:shadow ios:shadow transition-colors hover:bg-gray-900/90 active:bg-gray-400/90 web:focus-visible:outline-none web:focus-visible:ring-1 focus-visible:ring-gray-950 disabled:pointer-events-none disabled:opacity-50 dark:bg-gray-50 dark:text-gray-900 dark:hover:bg-gray-50/90 dark:focus-visible:ring-gray-300"
-                href="/"
-              >
-                Explore
-              </Link>
-            </View>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function Header() {
-  const { top } = useSafeAreaInsets();
-  return (
-    <View style={{ paddingTop: top }}>
-      <View className="px-4 lg:px-6 h-14 flex items-center flex-row justify-between ">
-        <Link className="font-bold flex-1 items-center justify-center" href="/">
-          ACME
-        </Link>
-        <View className="flex flex-row gap-4 sm:gap-6">
-          <Link
-            className="text-md font-medium hover:underline web:underline-offset-4"
-            href="/"
-          >
-            About
-          </Link>
-          <Link
-            className="text-md font-medium hover:underline web:underline-offset-4"
-            href="/"
-          >
-            Product
-          </Link>
-          <Link
-            className="text-md font-medium hover:underline web:underline-offset-4"
-            href="/"
-          >
-            Pricing
-          </Link>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function Footer() {
-  const { bottom } = useSafeAreaInsets();
-  return (
-    <View
-      className="flex shrink-0 bg-gray-100 native:hidden"
-      style={{ paddingBottom: bottom }}
-    >
-      <View className="py-6 flex-1 items-start px-4 md:px-6 ">
-        <Text className={"text-center text-gray-700"}>
-          © {new Date().getFullYear()} Me
-        </Text>
-      </View>
-    </View>
-  );
-}
+// Thêm một số style cơ bản
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  itemContainer: {
+    backgroundColor: "white",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    elevation: 1, // Shadow cho Android
+  },
+  itemMain: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  itemTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  itemAmount: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "red",
+  },
+  itemDetails: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  itemCategory: {
+    fontSize: 14,
+    color: "gray",
+  },
+  paid: {
+    fontSize: 14,
+    color: "green",
+    fontWeight: "bold",
+  },
+  unpaid: {
+    fontSize: 14,
+    color: "orange",
+    fontWeight: "bold",
+  },
+  emptyContainer: {
+    flex: 1,
+    marginTop: 150,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 18,
+    color: "gray",
+  },
+});

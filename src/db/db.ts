@@ -1,4 +1,5 @@
 // File: db.ts
+import { Expense } from "@/types/expense";
 import { SQLiteDatabase } from "expo-sqlite";
 
 /**
@@ -47,4 +48,15 @@ export const initTable = async (db: SQLiteDatabase) => {
   } else {
     console.log("Database already contains data, skipping seed.");
   }
+  
+};
+
+export const getAllExpenses = async (
+  db: SQLiteDatabase
+): Promise<Expense[]> => {
+  console.log("Fetching all expenses...");
+  // Sắp xếp theo ngày tạo mới nhất
+  return await db.getAllAsync<Expense>(
+    "SELECT * FROM expenses ORDER BY created_at DESC"
+  );
 };
