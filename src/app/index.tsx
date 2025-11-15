@@ -1,28 +1,28 @@
-// File: app/index.tsx (ĐÃ SỬA LỖI GIAO DIỆN CÂU 7)
+// File: app/index.tsx (Bổ sung Câu 8: Tìm kiếm)
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   Modal,
-  TextInput,
+  TextInput, // TextInput đã được import
   Button,
   Pressable,
   Alert,
   TouchableOpacity,
 } from "react-native";
-import React, { useCallback, useState } from "react";
+// 1. Import useMemo
+import React, { useCallback, useState, useMemo } from "react";
 import { useSQLiteContext } from "expo-sqlite";
 import { Expense } from "@/types/expense"; // Đảm bảo đúng đường dẫn
 import { useFocusEffect } from "expo-router";
-// Thêm import deleteExpense cho Câu 7
 import {
   getAllExpenses,
   createExpense,
   togglePaidState,
   updateExpense,
-  deleteExpense, // Import hàm mới
-} from "@/db/db";
+  deleteExpense,
+} from "@/db/db"; // Sửa lại đường dẫn nếu cần
 
 // Hàm helper để format tiền tệ
 const formatCurrency = (amount: number) => {
@@ -32,26 +32,21 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-// --- Cập nhật ExpenseItem (ĐÃ SỬA LỖI GIAO DIỆN) ---
+// Component ExpenseItem (Không thay đổi)
 type ExpenseItemProps = {
   item: Expense;
   onToggle: (item: Expense) => void;
   onLongPress: (item: Expense) => void;
   onDelete: (id: number) => void;
 };
-
 const ExpenseItem = React.memo(
   ({ item, onToggle, onLongPress, onDelete }: ExpenseItemProps) => (
     <View style={styles.itemOuterContainer}>
-      {/* SỬA LỖI: Biến TouchableOpacity thành itemContainer chính
-        và gán style={styles.itemContainer} (có flex: 1) cho nó.
-      */}
       <TouchableOpacity
         onPress={() => onToggle(item)}
         onLongPress={() => onLongPress(item)}
-        style={styles.itemContainer} // <--- SỬA Ở ĐÂY
+        style={styles.itemContainer}
       >
-        {/* Bỏ đi 1 View thừa bọc bên ngoài */}
         <View style={styles.itemMain}>
           <Text style={styles.itemTitle}>{item.title}</Text>
           <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
@@ -63,14 +58,8 @@ const ExpenseItem = React.memo(
           </Text>
         </View>
       </TouchableOpacity>
-      
-      {/* Nút Xóa (Câu 7) */}
       <View style={styles.deleteButtonContainer}>
-        <Button
-          title="Xóa"
-          color="red"
-          onPress={() => onDelete(item.id)}
-        />
+        <Button title="Xóa" color="red" onPress={() => onDelete(item.id)} />
       </View>
     </View>
   )
@@ -79,18 +68,22 @@ const ExpenseItem = React.memo(
 
 export default function HomeScreen() {
   const db = useSQLiteContext();
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]); // Danh sách gốc
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
 
+  // --- 2. Thêm State cho Tìm kiếm (Câu 8) ---
+  const [searchQuery, setSearchQuery] = useState("");
+  // -----------------------------------------
+
   // Hàm load dữ liệu
   const loadData = useCallback(async () => {
     console.log("Loading data for home screen...");
     const data = await getAllExpenses(db);
-    setExpenses(data);
+    setExpenses(data); // Cập nhật danh sách gốc
   }, [db]);
 
   // Load data khi focus
@@ -100,7 +93,17 @@ export default function HomeScreen() {
     }, [loadData])
   );
 
-  // Hàm đóng/reset Modal
+  // --- 3. Dùng useMemo để lọc danh sách (Câu 8) ---
+  const filteredExpenses = useMemo(() => {
+    // Lọc theo title
+    return expenses.filter((expense) =>
+      expense.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [expenses, searchQuery]); // Chỉ tính toán lại khi expenses hoặc searchQuery thay đổi
+  // -----------------------------------------------
+
+  // (Các hàm xử lý Modal, Save, Toggle, Delete không thay đổi)
+  // ...
   const closeAndResetModal = () => {
     setModalVisible(false);
     setEditingId(null);
@@ -108,14 +111,10 @@ export default function HomeScreen() {
     setAmount("");
     setCategory("");
   };
-
-  // Hàm mở Modal Thêm
   const handleOpenAddModal = () => {
     closeAndResetModal();
     setModalVisible(true);
   };
-
-  // Hàm mở Modal Sửa
   const handleOpenEditModal = (item: Expense) => {
     setEditingId(item.id);
     setTitle(item.title);
@@ -123,8 +122,6 @@ export default function HomeScreen() {
     setCategory(item.category || "");
     setModalVisible(true);
   };
-
-  // Hàm Lưu (Thêm/Sửa)
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert("Lỗi", "Tiêu đề (title) là bắt buộc.");
@@ -135,7 +132,6 @@ export default function HomeScreen() {
       Alert.alert("Lỗi", "Số tiền (amount) phải là một số lớn hơn 0.");
       return;
     }
-
     try {
       const dataToSave = { title, amount: parsedAmount, category };
       if (editingId) {
@@ -150,8 +146,6 @@ export default function HomeScreen() {
       Alert.alert("Lỗi", "Không thể lưu chi tiêu.");
     }
   };
-
-  // Hàm Toggle Paid
   const handleTogglePaid = async (item: Expense) => {
     try {
       await togglePaidState(db, item.id, item.paid);
@@ -161,8 +155,6 @@ export default function HomeScreen() {
       Alert.alert("Lỗi", "Không thể cập nhật trạng thái.");
     }
   };
-
-  // --- Hàm xử lý Xóa có xác nhận (Câu 7) ---
   const handleDeleteWithConfirm = (id: number) => {
     Alert.alert(
       "Xác nhận xóa",
@@ -175,7 +167,7 @@ export default function HomeScreen() {
           onPress: async () => {
             try {
               await deleteExpense(db, id);
-              await loadData(); // Tải lại danh sách sau khi xóa
+              await loadData();
             } catch (e) {
               console.error(e);
               Alert.alert("Lỗi", "Không thể xóa chi tiêu.");
@@ -185,7 +177,7 @@ export default function HomeScreen() {
       ]
     );
   };
-  // ------------------------------------------
+  // ...
 
   // Render khi rỗng
   const renderEmpty = () => (
@@ -196,14 +188,26 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* --- 4. Thêm TextInput Tìm kiếm (Câu 8) --- */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Tìm kiếm theo tiêu đề..."
+          value={searchQuery}
+          onChangeText={setSearchQuery} // Cập nhật state khi gõ
+        />
+      </View>
+      {/* ------------------------------------------ */}
+
+      {/* --- 5. Cập nhật FlatList (Câu 8) --- */}
       <FlatList
-        data={expenses}
+        data={filteredExpenses} // Sử dụng danh sách đã lọc
         renderItem={({ item }) => (
           <ExpenseItem
             item={item}
             onToggle={handleTogglePaid}
             onLongPress={handleOpenEditModal}
-            onDelete={handleDeleteWithConfirm} // Thêm prop (Câu 7)
+            onDelete={handleDeleteWithConfirm}
           />
         )}
         keyExtractor={(item) => item.id.toString()}
@@ -228,6 +232,7 @@ export default function HomeScreen() {
             <Text style={styles.modalTitle}>
               {editingId ? "Sửa Chi Tiêu" : "Thêm Chi Tiêu Mới"}
             </Text>
+            {/* ... (Các TextInput của Modal) ... */}
             <TextInput
               style={styles.input}
               placeholder="Tiêu đề (bắt buộc)"
@@ -248,11 +253,7 @@ export default function HomeScreen() {
               onChangeText={setCategory}
             />
             <View style={styles.buttonGroup}>
-              <Button
-                title="Hủy"
-                onPress={closeAndResetModal}
-                color="red"
-              />
+              <Button title="Hủy" onPress={closeAndResetModal} color="red" />
               <Button title="Lưu" onPress={handleSave} />
             </View>
           </View>
@@ -262,30 +263,40 @@ export default function HomeScreen() {
   );
 }
 
-// Giữ nguyên Styles, không cần thay đổi
+// 6. Thêm Style cho ô tìm kiếm (Câu 8)
 const styles = StyleSheet.create({
+  // ... (Tất cả style cũ giữ nguyên)
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
-  // Container bên ngoài để chứa nút xóa (Câu 7)
+  // --- Style cho Tìm kiếm (Câu 8) ---
+  searchContainer: {
+    padding: 10,
+    backgroundColor: "white",
+  },
+  searchInput: {
+    height: 40,
+    borderColor: "gray",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+  },
+  // ----------------------------------
   itemOuterContainer: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
   },
-  // Style cho item (Câu 7)
   itemContainer: {
-    flex: 1, // Để item co giãn
+    flex: 1,
     backgroundColor: "white",
     padding: 15,
     borderRadius: 8,
     elevation: 1,
   },
-  // Style cho nút xóa (Câu 7)
   deleteButtonContainer: {
     marginLeft: 10,
-    // Bỏ padding 5 vì Button tự có padding
   },
   itemMain: {
     flexDirection: "row",
