@@ -4,18 +4,21 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  // Thêm các import cho Câu 4
   Modal,
   TextInput,
   Button,
   Pressable,
   Alert,
+  // Thêm TouchableOpacity để có hiệu ứng nhấn (Câu 5)
+  TouchableOpacity,
 } from "react-native";
 import React, { useCallback, useState } from "react";
 import { useSQLiteContext } from "expo-sqlite";
-import { Expense } from "@/types/expense"; 
+import { Expense } from "@/types/expense"; // Đảm bảo đúng đường dẫn
 import { useFocusEffect } from "expo-router";
-import { createExpense, getAllExpenses } from "@/db/db";
+// Thêm import togglePaidState cho Câu 5
+import { getAllExpenses, createExpense, togglePaidState } from "@/db/db"; 
+
 // Hàm helper để format tiền tệ
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("vi-VN", {
@@ -24,21 +27,32 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-// Component con để render 1 item
-const ExpenseItem = React.memo(({ item }: { item: Expense }) => (
-  <View style={styles.itemContainer}>
-    <View style={styles.itemMain}>
-      <Text style={styles.itemTitle}>{item.title}</Text>
-      <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
+// --- Cập nhật ExpenseItem (Câu 5) ---
+// Thêm props: onToggle: (item: Expense) => void
+type ExpenseItemProps = {
+  item: Expense;
+  onToggle: (item: Expense) => void; // Prop để xử lý toggle
+};
+
+const ExpenseItem = React.memo(({ item, onToggle }: ExpenseItemProps) => (
+  // Bọc item trong TouchableOpacity để bắt sự kiện "chạm" (Câu 5)
+  <TouchableOpacity onPress={() => onToggle(item)}>
+    <View style={styles.itemContainer}>
+      <View style={styles.itemMain}>
+        <Text style={styles.itemTitle}>{item.title}</Text>
+        <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
+      </View>
+      <View style={styles.itemDetails}>
+        <Text style={styles.itemCategory}>{item.category || "Không có"}</Text>
+        {/* UI đã thể hiện rõ trạng thái (paid/unpaid) [cite: 119] */}
+        <Text style={item.paid ? styles.paid : styles.unpaid}>
+          {item.paid ? "Đã trả" : "Chưa trả"}
+        </Text>
+      </View>
     </View>
-    <View style={styles.itemDetails}>
-      <Text style={styles.itemCategory}>{item.category || "Không có"}</Text>
-      <Text style={item.paid ? styles.paid : styles.unpaid}>
-        {item.paid ? "Đã trả" : "Chưa trả"}
-      </Text>
-    </View>
-  </View>
+  </TouchableOpacity>
 ));
+// ------------------------------------
 
 export default function HomeScreen() {
   const db = useSQLiteContext();
@@ -67,27 +81,20 @@ export default function HomeScreen() {
 
   // --- Hàm xử lý lưu (Câu 4) ---
   const handleSave = async () => {
-    // Validate: title không rỗng
+    // Validate: title không rỗng [cite: 113]
     if (!title.trim()) {
       Alert.alert("Lỗi", "Tiêu đề (title) là bắt buộc.");
       return;
     }
-
-    // Validate: amount là số hợp lệ và > 0
+    // Validate: amount là số hợp lệ và > 0 [cite: 114]
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert("Lỗi", "Số tiền (amount) phải là một số lớn hơn 0.");
       return;
     }
-
     try {
-      // Lưu vào DB
       await createExpense(db, { title, amount: parsedAmount, category });
-
-      // Cập nhật lại danh sách
       await loadData();
-
-      // Đóng modal và reset form
       setModalVisible(false);
       setTitle("");
       setAmount("");
@@ -98,6 +105,19 @@ export default function HomeScreen() {
     }
   };
   // ---------------------------------
+
+  // --- Hàm xử lý Toggle Paid (Câu 5) ---
+  const handleTogglePaid = async (item: Expense) => {
+    try {
+      await togglePaidState(db, item.id, item.paid);
+      // Tải lại dữ liệu để cập nhật UI
+      await loadData();
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Lỗi", "Không thể cập nhật trạng thái.");
+    }
+  };
+  // ------------------------------------
 
   // Component hiển thị khi danh sách rỗng
   const renderEmpty = () => (
@@ -110,7 +130,10 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <FlatList
         data={expenses}
-        renderItem={({ item }) => <ExpenseItem item={item} />}
+        // Cập nhật renderItem để truyền hàm handleTogglePaid (Câu 5)
+        renderItem={({ item }) => (
+          <ExpenseItem item={item} onToggle={handleTogglePaid} />
+        )}
         keyExtractor={(item) => item.id.toString()}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={{ padding: 10 }}
@@ -165,7 +188,7 @@ export default function HomeScreen() {
   );
 }
 
-// Thêm một số style cơ bản
+// Giữ nguyên các style cũ
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -221,7 +244,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "gray",
   },
-  // --- Styles cho Modal và FAB (Câu 4) ---
   fab: {
     position: "absolute",
     bottom: 30,
@@ -237,7 +259,7 @@ const styles = StyleSheet.create({
   fabText: {
     fontSize: 30,
     color: "white",
-    lineHeight: 30, // Căn giữa dấu +
+    lineHeight: 30, 
   },
   modalContainer: {
     flex: 1,
@@ -271,5 +293,4 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     marginTop: 10,
   },
-  // --------------------------------------
 });

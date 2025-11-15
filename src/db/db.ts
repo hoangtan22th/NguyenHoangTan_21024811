@@ -76,3 +76,20 @@ export const createExpense = async (
     [data.title, data.amount, data.category || null, 1, now]
   );
 };
+
+/**
+ * Hàm cập nhật trạng thái paid (Câu 5) 
+ */
+export const togglePaidState = async (
+  db: SQLiteDatabase,
+  id: number,
+  currentPaid: 0 | 1
+) => {
+  // Đảo ngược trạng thái: 1 -> 0, 0 -> 1 
+  const newPaidState = currentPaid === 1 ? 0 : 1;
+  console.log(`Toggling paid state for id ${id} to ${newPaidState}`);
+  await db.runAsync("UPDATE expenses SET paid = ? WHERE id = ?", [
+    newPaidState,
+    id,
+  ]);
+};
