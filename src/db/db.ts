@@ -108,3 +108,10 @@ export const updateExpense = async (
     [data.title, data.amount, data.category || null, data.id]
   );
 };
+/**
+ * Hàm xóa chi tiêu (Câu 7)
+ */
+export const deleteExpense = async (db: SQLiteDatabase, id: number) => {
+  console.log(`Deleting expense id ${id}`);
+  await db.runAsync("DELETE FROM expenses WHERE id = ?", [id]);
+};

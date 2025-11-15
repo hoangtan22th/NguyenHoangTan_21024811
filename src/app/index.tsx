@@ -1,4 +1,4 @@
-// File: app/index.tsx
+// File: app/index.tsx (ĐÃ SỬA LỖI GIAO DIỆN CÂU 7)
 import {
   View,
   Text,
@@ -15,12 +15,13 @@ import React, { useCallback, useState } from "react";
 import { useSQLiteContext } from "expo-sqlite";
 import { Expense } from "@/types/expense"; // Đảm bảo đúng đường dẫn
 import { useFocusEffect } from "expo-router";
-// Thêm import updateExpense cho Câu 6
+// Thêm import deleteExpense cho Câu 7
 import {
   getAllExpenses,
   createExpense,
   togglePaidState,
-  updateExpense, // Import hàm mới
+  updateExpense,
+  deleteExpense, // Import hàm mới
 } from "@/db/db";
 
 // Hàm helper để format tiền tệ
@@ -31,22 +32,26 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-// --- Cập nhật ExpenseItem (Câu 6) ---
-// Thêm props: onLongPress
+// --- Cập nhật ExpenseItem (ĐÃ SỬA LỖI GIAO DIỆN) ---
 type ExpenseItemProps = {
   item: Expense;
   onToggle: (item: Expense) => void;
-  onLongPress: (item: Expense) => void; // Prop để xử lý nhấn giữ
+  onLongPress: (item: Expense) => void;
+  onDelete: (id: number) => void;
 };
 
 const ExpenseItem = React.memo(
-  ({ item, onToggle, onLongPress }: ExpenseItemProps) => (
-    <TouchableOpacity
-      onPress={() => onToggle(item)}
-      // Thêm sự kiện onLongPress (Câu 6)
-      onLongPress={() => onLongPress(item)}
-    >
-      <View style={styles.itemContainer}>
+  ({ item, onToggle, onLongPress, onDelete }: ExpenseItemProps) => (
+    <View style={styles.itemOuterContainer}>
+      {/* SỬA LỖI: Biến TouchableOpacity thành itemContainer chính
+        và gán style={styles.itemContainer} (có flex: 1) cho nó.
+      */}
+      <TouchableOpacity
+        onPress={() => onToggle(item)}
+        onLongPress={() => onLongPress(item)}
+        style={styles.itemContainer} // <--- SỬA Ở ĐÂY
+      >
+        {/* Bỏ đi 1 View thừa bọc bên ngoài */}
         <View style={styles.itemMain}>
           <Text style={styles.itemTitle}>{item.title}</Text>
           <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
@@ -57,8 +62,17 @@ const ExpenseItem = React.memo(
             {item.paid ? "Đã trả" : "Chưa trả"}
           </Text>
         </View>
+      </TouchableOpacity>
+      
+      {/* Nút Xóa (Câu 7) */}
+      <View style={styles.deleteButtonContainer}>
+        <Button
+          title="Xóa"
+          color="red"
+          onPress={() => onDelete(item.id)}
+        />
       </View>
-    </TouchableOpacity>
+    </View>
   )
 );
 // ------------------------------------
@@ -66,31 +80,27 @@ const ExpenseItem = React.memo(
 export default function HomeScreen() {
   const db = useSQLiteContext();
   const [expenses, setExpenses] = useState<Expense[]>([]);
-
-  // --- State cho Modal và Form ---
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
-  // Thêm state để biết đang sửa item nào (Câu 6)
   const [editingId, setEditingId] = useState<number | null>(null);
-  // ----------------------------------------
 
-  // Hàm để load dữ liệu từ DB
+  // Hàm load dữ liệu
   const loadData = useCallback(async () => {
     console.log("Loading data for home screen...");
     const data = await getAllExpenses(db);
     setExpenses(data);
   }, [db]);
 
-  // Dùng useFocusEffect để load lại data mỗi khi quay lại màn hình
+  // Load data khi focus
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [loadData])
   );
 
-  // --- Hàm reset và đóng Modal (Câu 6) ---
+  // Hàm đóng/reset Modal
   const closeAndResetModal = () => {
     setModalVisible(false);
     setEditingId(null);
@@ -98,16 +108,14 @@ export default function HomeScreen() {
     setAmount("");
     setCategory("");
   };
-  // ------------------------------------
 
-  // --- Hàm mở Modal ở chế độ Thêm (Câu 6) ---
+  // Hàm mở Modal Thêm
   const handleOpenAddModal = () => {
-    closeAndResetModal(); // Reset mọi thứ trước
+    closeAndResetModal();
     setModalVisible(true);
   };
-  // ------------------------------------
 
-  // --- Hàm mở Modal ở chế độ Sửa (Câu 6) ---
+  // Hàm mở Modal Sửa
   const handleOpenEditModal = (item: Expense) => {
     setEditingId(item.id);
     setTitle(item.title);
@@ -115,16 +123,13 @@ export default function HomeScreen() {
     setCategory(item.category || "");
     setModalVisible(true);
   };
-  // ------------------------------------
 
-  // --- Hàm xử lý lưu (Cập nhật cho Câu 6) ---
+  // Hàm Lưu (Thêm/Sửa)
   const handleSave = async () => {
-    // Validate: title không rỗng
     if (!title.trim()) {
       Alert.alert("Lỗi", "Tiêu đề (title) là bắt buộc.");
       return;
     }
-    // Validate: amount là số hợp lệ và > 0
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert("Lỗi", "Số tiền (amount) phải là một số lớn hơn 0.");
@@ -133,25 +138,20 @@ export default function HomeScreen() {
 
     try {
       const dataToSave = { title, amount: parsedAmount, category };
-
       if (editingId) {
-        // Chế độ Sửa: Gọi updateExpense
         await updateExpense(db, { ...dataToSave, id: editingId });
       } else {
-        // Chế độ Thêm: Gọi createExpense
         await createExpense(db, dataToSave);
       }
-
-      await loadData(); // Tải lại dữ liệu
-      closeAndResetModal(); // Đóng và reset modal
+      await loadData();
+      closeAndResetModal();
     } catch (e) {
       console.error(e);
       Alert.alert("Lỗi", "Không thể lưu chi tiêu.");
     }
   };
-  // ---------------------------------
 
-  // --- Hàm xử lý Toggle Paid (Câu 5) ---
+  // Hàm Toggle Paid
   const handleTogglePaid = async (item: Expense) => {
     try {
       await togglePaidState(db, item.id, item.paid);
@@ -161,9 +161,33 @@ export default function HomeScreen() {
       Alert.alert("Lỗi", "Không thể cập nhật trạng thái.");
     }
   };
-  // ------------------------------------
 
-  // Component hiển thị khi danh sách rỗng
+  // --- Hàm xử lý Xóa có xác nhận (Câu 7) ---
+  const handleDeleteWithConfirm = (id: number) => {
+    Alert.alert(
+      "Xác nhận xóa",
+      "Bạn có chắc chắn muốn xóa khoản chi tiêu này?",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteExpense(db, id);
+              await loadData(); // Tải lại danh sách sau khi xóa
+            } catch (e) {
+              console.error(e);
+              Alert.alert("Lỗi", "Không thể xóa chi tiêu.");
+            }
+          },
+        },
+      ]
+    );
+  };
+  // ------------------------------------------
+
+  // Render khi rỗng
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyText}>Chưa có khoản chi tiêu nào.</Text>
@@ -178,7 +202,8 @@ export default function HomeScreen() {
           <ExpenseItem
             item={item}
             onToggle={handleTogglePaid}
-            onLongPress={handleOpenEditModal} // Thêm prop (Câu 6)
+            onLongPress={handleOpenEditModal}
+            onDelete={handleDeleteWithConfirm} // Thêm prop (Câu 7)
           />
         )}
         keyExtractor={(item) => item.id.toString()}
@@ -186,21 +211,20 @@ export default function HomeScreen() {
         contentContainerStyle={{ padding: 10 }}
       />
 
-      {/* --- Nút "+" để mở Modal (Cập nhật cho Câu 6) --- */}
+      {/* Nút "+" */}
       <Pressable style={styles.fab} onPress={handleOpenAddModal}>
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
-      {/* --- Modal (Cập nhật cho Câu 6) --- */}
+      {/* Modal Thêm/Sửa */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={closeAndResetModal} // Cập nhật (Câu 6)
+        onRequestClose={closeAndResetModal}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            {/* Cập nhật tiêu đề Modal (Câu 6) */}
             <Text style={styles.modalTitle}>
               {editingId ? "Sửa Chi Tiêu" : "Thêm Chi Tiêu Mới"}
             </Text>
@@ -226,7 +250,7 @@ export default function HomeScreen() {
             <View style={styles.buttonGroup}>
               <Button
                 title="Hủy"
-                onPress={closeAndResetModal} // Cập nhật (Câu 6)
+                onPress={closeAndResetModal}
                 color="red"
               />
               <Button title="Lưu" onPress={handleSave} />
@@ -238,18 +262,30 @@ export default function HomeScreen() {
   );
 }
 
-// Giữ nguyên các style cũ
+// Giữ nguyên Styles, không cần thay đổi
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
+  // Container bên ngoài để chứa nút xóa (Câu 7)
+  itemOuterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  // Style cho item (Câu 7)
   itemContainer: {
+    flex: 1, // Để item co giãn
     backgroundColor: "white",
     padding: 15,
     borderRadius: 8,
-    marginBottom: 10,
-    elevation: 1, // Shadow cho Android
+    elevation: 1,
+  },
+  // Style cho nút xóa (Câu 7)
+  deleteButtonContainer: {
+    marginLeft: 10,
+    // Bỏ padding 5 vì Button tự có padding
   },
   itemMain: {
     flexDirection: "row",
