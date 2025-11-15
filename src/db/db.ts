@@ -8,7 +8,8 @@ import { SQLiteDatabase } from "expo-sqlite";
  */
 // Kiểu dữ liệu cho việc tạo mới
 type CreateExpenseInput = Pick<Expense, "title" | "amount" | "category">;
-
+// Kiểu dữ liệu cho việc cập nhật (Câu 6)
+type UpdateExpenseInput = Pick<Expense, "id" | "title" | "amount" | "category">;
 export const initTable = async (db: SQLiteDatabase) => {
   console.log("Initializing database table...");
 
@@ -92,4 +93,18 @@ export const togglePaidState = async (
     newPaidState,
     id,
   ]);
+};
+
+/**
+ * Hàm cập nhật chi tiêu (Câu 6)
+ */
+export const updateExpense = async (
+  db: SQLiteDatabase,
+  data: UpdateExpenseInput
+) => {
+  console.log(`Updating expense id ${data.id}`);
+  await db.runAsync(
+    "UPDATE expenses SET title = ?, amount = ?, category = ? WHERE id = ?",
+    [data.title, data.amount, data.category || null, data.id]
+  );
 };

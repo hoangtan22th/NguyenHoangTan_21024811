@@ -9,15 +9,19 @@ import {
   Button,
   Pressable,
   Alert,
-  // Thêm TouchableOpacity để có hiệu ứng nhấn (Câu 5)
   TouchableOpacity,
 } from "react-native";
 import React, { useCallback, useState } from "react";
 import { useSQLiteContext } from "expo-sqlite";
 import { Expense } from "@/types/expense"; // Đảm bảo đúng đường dẫn
 import { useFocusEffect } from "expo-router";
-// Thêm import togglePaidState cho Câu 5
-import { getAllExpenses, createExpense, togglePaidState } from "@/db/db"; 
+// Thêm import updateExpense cho Câu 6
+import {
+  getAllExpenses,
+  createExpense,
+  togglePaidState,
+  updateExpense, // Import hàm mới
+} from "@/db/db";
 
 // Hàm helper để format tiền tệ
 const formatCurrency = (amount: number) => {
@@ -27,42 +31,49 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-// --- Cập nhật ExpenseItem (Câu 5) ---
-// Thêm props: onToggle: (item: Expense) => void
+// --- Cập nhật ExpenseItem (Câu 6) ---
+// Thêm props: onLongPress
 type ExpenseItemProps = {
   item: Expense;
-  onToggle: (item: Expense) => void; // Prop để xử lý toggle
+  onToggle: (item: Expense) => void;
+  onLongPress: (item: Expense) => void; // Prop để xử lý nhấn giữ
 };
 
-const ExpenseItem = React.memo(({ item, onToggle }: ExpenseItemProps) => (
-  // Bọc item trong TouchableOpacity để bắt sự kiện "chạm" (Câu 5)
-  <TouchableOpacity onPress={() => onToggle(item)}>
-    <View style={styles.itemContainer}>
-      <View style={styles.itemMain}>
-        <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
+const ExpenseItem = React.memo(
+  ({ item, onToggle, onLongPress }: ExpenseItemProps) => (
+    <TouchableOpacity
+      onPress={() => onToggle(item)}
+      // Thêm sự kiện onLongPress (Câu 6)
+      onLongPress={() => onLongPress(item)}
+    >
+      <View style={styles.itemContainer}>
+        <View style={styles.itemMain}>
+          <Text style={styles.itemTitle}>{item.title}</Text>
+          <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
+        </View>
+        <View style={styles.itemDetails}>
+          <Text style={styles.itemCategory}>{item.category || "Không có"}</Text>
+          <Text style={item.paid ? styles.paid : styles.unpaid}>
+            {item.paid ? "Đã trả" : "Chưa trả"}
+          </Text>
+        </View>
       </View>
-      <View style={styles.itemDetails}>
-        <Text style={styles.itemCategory}>{item.category || "Không có"}</Text>
-        {/* UI đã thể hiện rõ trạng thái (paid/unpaid) [cite: 119] */}
-        <Text style={item.paid ? styles.paid : styles.unpaid}>
-          {item.paid ? "Đã trả" : "Chưa trả"}
-        </Text>
-      </View>
-    </View>
-  </TouchableOpacity>
-));
+    </TouchableOpacity>
+  )
+);
 // ------------------------------------
 
 export default function HomeScreen() {
   const db = useSQLiteContext();
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
-  // --- State cho Modal và Form (Câu 4) ---
+  // --- State cho Modal và Form ---
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
+  // Thêm state để biết đang sửa item nào (Câu 6)
+  const [editingId, setEditingId] = useState<number | null>(null);
   // ----------------------------------------
 
   // Hàm để load dữ liệu từ DB
@@ -79,26 +90,60 @@ export default function HomeScreen() {
     }, [loadData])
   );
 
-  // --- Hàm xử lý lưu (Câu 4) ---
+  // --- Hàm reset và đóng Modal (Câu 6) ---
+  const closeAndResetModal = () => {
+    setModalVisible(false);
+    setEditingId(null);
+    setTitle("");
+    setAmount("");
+    setCategory("");
+  };
+  // ------------------------------------
+
+  // --- Hàm mở Modal ở chế độ Thêm (Câu 6) ---
+  const handleOpenAddModal = () => {
+    closeAndResetModal(); // Reset mọi thứ trước
+    setModalVisible(true);
+  };
+  // ------------------------------------
+
+  // --- Hàm mở Modal ở chế độ Sửa (Câu 6) ---
+  const handleOpenEditModal = (item: Expense) => {
+    setEditingId(item.id);
+    setTitle(item.title);
+    setAmount(item.amount.toString());
+    setCategory(item.category || "");
+    setModalVisible(true);
+  };
+  // ------------------------------------
+
+  // --- Hàm xử lý lưu (Cập nhật cho Câu 6) ---
   const handleSave = async () => {
-    // Validate: title không rỗng [cite: 113]
+    // Validate: title không rỗng
     if (!title.trim()) {
       Alert.alert("Lỗi", "Tiêu đề (title) là bắt buộc.");
       return;
     }
-    // Validate: amount là số hợp lệ và > 0 [cite: 114]
+    // Validate: amount là số hợp lệ và > 0
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert("Lỗi", "Số tiền (amount) phải là một số lớn hơn 0.");
       return;
     }
+
     try {
-      await createExpense(db, { title, amount: parsedAmount, category });
-      await loadData();
-      setModalVisible(false);
-      setTitle("");
-      setAmount("");
-      setCategory("");
+      const dataToSave = { title, amount: parsedAmount, category };
+
+      if (editingId) {
+        // Chế độ Sửa: Gọi updateExpense
+        await updateExpense(db, { ...dataToSave, id: editingId });
+      } else {
+        // Chế độ Thêm: Gọi createExpense
+        await createExpense(db, dataToSave);
+      }
+
+      await loadData(); // Tải lại dữ liệu
+      closeAndResetModal(); // Đóng và reset modal
     } catch (e) {
       console.error(e);
       Alert.alert("Lỗi", "Không thể lưu chi tiêu.");
@@ -110,7 +155,6 @@ export default function HomeScreen() {
   const handleTogglePaid = async (item: Expense) => {
     try {
       await togglePaidState(db, item.id, item.paid);
-      // Tải lại dữ liệu để cập nhật UI
       await loadData();
     } catch (e) {
       console.error(e);
@@ -130,30 +174,36 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <FlatList
         data={expenses}
-        // Cập nhật renderItem để truyền hàm handleTogglePaid (Câu 5)
         renderItem={({ item }) => (
-          <ExpenseItem item={item} onToggle={handleTogglePaid} />
+          <ExpenseItem
+            item={item}
+            onToggle={handleTogglePaid}
+            onLongPress={handleOpenEditModal} // Thêm prop (Câu 6)
+          />
         )}
         keyExtractor={(item) => item.id.toString()}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={{ padding: 10 }}
       />
 
-      {/* --- Nút "+" để mở Modal (Câu 4) --- */}
-      <Pressable style={styles.fab} onPress={() => setModalVisible(true)}>
+      {/* --- Nút "+" để mở Modal (Cập nhật cho Câu 6) --- */}
+      <Pressable style={styles.fab} onPress={handleOpenAddModal}>
         <Text style={styles.fabText}>+</Text>
       </Pressable>
 
-      {/* --- Modal thêm mới (Câu 4) --- */}
+      {/* --- Modal (Cập nhật cho Câu 6) --- */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeAndResetModal} // Cập nhật (Câu 6)
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Thêm Chi Tiêu Mới</Text>
+            {/* Cập nhật tiêu đề Modal (Câu 6) */}
+            <Text style={styles.modalTitle}>
+              {editingId ? "Sửa Chi Tiêu" : "Thêm Chi Tiêu Mới"}
+            </Text>
             <TextInput
               style={styles.input}
               placeholder="Tiêu đề (bắt buộc)"
@@ -176,7 +226,7 @@ export default function HomeScreen() {
             <View style={styles.buttonGroup}>
               <Button
                 title="Hủy"
-                onPress={() => setModalVisible(false)}
+                onPress={closeAndResetModal} // Cập nhật (Câu 6)
                 color="red"
               />
               <Button title="Lưu" onPress={handleSave} />
@@ -259,7 +309,7 @@ const styles = StyleSheet.create({
   fabText: {
     fontSize: 30,
     color: "white",
-    lineHeight: 30, 
+    lineHeight: 30,
   },
   modalContainer: {
     flex: 1,
