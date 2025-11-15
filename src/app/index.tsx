@@ -1,17 +1,18 @@
-// File: app/index.tsx (Bổ sung Câu 8: Tìm kiếm)
+// File: app/index.tsx (Bổ sung Câu 9: Import API)
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   Modal,
-  TextInput, // TextInput đã được import
+  TextInput,
   Button,
   Pressable,
   Alert,
   TouchableOpacity,
+  // 1. Import ActivityIndicator (Câu 9)
+  ActivityIndicator,
 } from "react-native";
-// 1. Import useMemo
 import React, { useCallback, useState, useMemo } from "react";
 import { useSQLiteContext } from "expo-sqlite";
 import { Expense } from "@/types/expense"; // Đảm bảo đúng đường dẫn
@@ -23,6 +24,17 @@ import {
   updateExpense,
   deleteExpense,
 } from "@/db/db"; // Sửa lại đường dẫn nếu cần
+
+const MOCK_API_URL =
+  "https://68d7af372144ea3f6da61c02.mockapi.io/NguyenHoangTan21024811/Expense"; 
+
+// Kiểu dữ liệu trả về từ API (Câu 9)
+type ApiExpense = {
+  id: string;
+  title: string;
+  amount: number;
+  category: string;
+};
 
 // Hàm helper để format tiền tệ
 const formatCurrency = (amount: number) => {
@@ -68,22 +80,23 @@ const ExpenseItem = React.memo(
 
 export default function HomeScreen() {
   const db = useSQLiteContext();
-  const [expenses, setExpenses] = useState<Expense[]>([]); // Danh sách gốc
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
-
-  // --- 2. Thêm State cho Tìm kiếm (Câu 8) ---
   const [searchQuery, setSearchQuery] = useState("");
-  // -----------------------------------------
+
+  // --- 2. Thêm State Loading (Câu 9) ---
+  const [isLoading, setIsLoading] = useState(false);
+  // ------------------------------------
 
   // Hàm load dữ liệu
   const loadData = useCallback(async () => {
     console.log("Loading data for home screen...");
     const data = await getAllExpenses(db);
-    setExpenses(data); // Cập nhật danh sách gốc
+    setExpenses(data);
   }, [db]);
 
   // Load data khi focus
@@ -93,14 +106,12 @@ export default function HomeScreen() {
     }, [loadData])
   );
 
-  // --- 3. Dùng useMemo để lọc danh sách (Câu 8) ---
+  // Dùng useMemo để lọc danh sách
   const filteredExpenses = useMemo(() => {
-    // Lọc theo title
     return expenses.filter((expense) =>
       expense.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [expenses, searchQuery]); // Chỉ tính toán lại khi expenses hoặc searchQuery thay đổi
-  // -----------------------------------------------
+  }, [expenses, searchQuery]);
 
   // (Các hàm xử lý Modal, Save, Toggle, Delete không thay đổi)
   // ...
@@ -179,6 +190,60 @@ export default function HomeScreen() {
   };
   // ...
 
+  // --- 3. Hàm Import API (Câu 9) ---
+  const handleImport = async () => {
+    setIsLoading(true); // Bắt đầu loading
+    try {
+      // 1. Gọi API
+      const response = await fetch(MOCK_API_URL);
+      if (!response.ok) {
+        throw new Error("Lỗi mạng hoặc API");
+      }
+      const apiData: ApiExpense[] = await response.json();
+
+      // 2. Lấy dữ liệu local để kiểm tra trùng
+      const localData = await getAllExpenses(db);
+      // Tạo một Set để kiểm tra (key = "title_amount") cho nhanh
+      const localSet = new Set(
+        localData.map((item) => `${item.title.toLowerCase()}_${item.amount}`)
+      );
+
+      let importedCount = 0;
+      // 3. Loop qua dữ liệu API và Merge
+      for (const apiItem of apiData) {
+        const itemTitle = apiItem.title;
+        // Đề bài nói map `price/amount` -> `amount`
+        const itemAmount = apiItem.amount;
+        const itemCategory = apiItem.category;
+
+        const checkKey = `${itemTitle.toLowerCase()}_${itemAmount}`;
+
+        // 4. Nếu title + amount chưa có, thì thêm vào
+        if (!localSet.has(checkKey)) {
+          await createExpense(db, {
+            title: itemTitle,
+            amount: itemAmount,
+            category: itemCategory,
+          });
+          importedCount++;
+        }
+      }
+
+      Alert.alert(
+        "Thành công",
+        `Đã import ${importedCount} khoản chi tiêu mới.`
+      );
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Lỗi", "Không thể import từ API. Hãy kiểm tra link API.");
+    } finally {
+      // 5. Dừng loading và tải lại dữ liệu
+      setIsLoading(false);
+      await loadData();
+    }
+  };
+  // -----------------------------------
+
   // Render khi rỗng
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -188,20 +253,31 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* --- 4. Thêm TextInput Tìm kiếm (Câu 8) --- */}
+      {/* Ô tìm kiếm (Câu 8) */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
           placeholder="Tìm kiếm theo tiêu đề..."
           value={searchQuery}
-          onChangeText={setSearchQuery} // Cập nhật state khi gõ
+          onChangeText={setSearchQuery}
         />
       </View>
-      {/* ------------------------------------------ */}
 
-      {/* --- 5. Cập nhật FlatList (Câu 8) --- */}
+      {/* --- 4. Nút Import và Loading (Câu 9) --- */}
+      <View style={styles.importContainer}>
+        <Button
+          title="Import từ API"
+          onPress={handleImport}
+          disabled={isLoading} // Vô hiệu hóa khi đang load
+        />
+        {/* Hiện vòng xoay khi đang load */}
+        {isLoading && <ActivityIndicator size="small" color="#0000ff" />}
+      </View>
+      {/* -------------------------------------- */}
+
+      {/* FlatList (Cập nhật data={filteredExpenses}) */}
       <FlatList
-        data={filteredExpenses} // Sử dụng danh sách đã lọc
+        data={filteredExpenses}
         renderItem={({ item }) => (
           <ExpenseItem
             item={item}
@@ -227,50 +303,19 @@ export default function HomeScreen() {
         transparent={true}
         onRequestClose={closeAndResetModal}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {editingId ? "Sửa Chi Tiêu" : "Thêm Chi Tiêu Mới"}
-            </Text>
-            {/* ... (Các TextInput của Modal) ... */}
-            <TextInput
-              style={styles.input}
-              placeholder="Tiêu đề (bắt buộc)"
-              value={title}
-              onChangeText={setTitle}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Số tiền (bắt buộc)"
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="numeric"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Danh mục (tùy chọn)"
-              value={category}
-              onChangeText={setCategory}
-            />
-            <View style={styles.buttonGroup}>
-              <Button title="Hủy" onPress={closeAndResetModal} color="red" />
-              <Button title="Lưu" onPress={handleSave} />
-            </View>
-          </View>
-        </View>
+        <View style={styles.modalContainer}>{/* ... */}</View>
       </Modal>
     </View>
   );
 }
 
-// 6. Thêm Style cho ô tìm kiếm (Câu 8)
+// 5. Thêm Style cho Import (Câu 9)
 const styles = StyleSheet.create({
   // ... (Tất cả style cũ giữ nguyên)
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#f5f5ff",
   },
-  // --- Style cho Tìm kiếm (Câu 8) ---
   searchContainer: {
     padding: 10,
     backgroundColor: "white",
@@ -282,7 +327,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
   },
-  // ----------------------------------
+  // --- Style cho Import (Câu 9) ---
+  importContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 10,
+    gap: 10, // Khoảng cách giữa nút và vòng xoay
+  },
+  // -------------------------------
   itemOuterContainer: {
     flexDirection: "row",
     alignItems: "center",
