@@ -6,6 +6,9 @@ import { SQLiteDatabase } from "expo-sqlite";
  * Hàm này được gọi bởi SQLiteProvider onInit
  * Nó sẽ tạo bảng và seed dữ liệu mẫu (nếu cần).
  */
+// Kiểu dữ liệu cho việc tạo mới
+type CreateExpenseInput = Pick<Expense, "title" | "amount" | "category">;
+
 export const initTable = async (db: SQLiteDatabase) => {
   console.log("Initializing database table...");
 
@@ -58,5 +61,18 @@ export const getAllExpenses = async (
   // Sắp xếp theo ngày tạo mới nhất
   return await db.getAllAsync<Expense>(
     "SELECT * FROM expenses ORDER BY created_at DESC"
+  );
+};
+
+export const createExpense = async (
+  db: SQLiteDatabase,
+  data: CreateExpenseInput
+) => {
+  console.log("Creating new expense:", data.title);
+  const now = Math.floor(Date.now() / 1000); // Unix timestamp
+
+  await db.runAsync(
+    "INSERT INTO expenses (title, amount, category, paid, created_at) VALUES (?, ?, ?, ?, ?)",
+    [data.title, data.amount, data.category || null, 1, now]
   );
 };
